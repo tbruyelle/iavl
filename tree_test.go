@@ -12,12 +12,16 @@ import (
 	"strconv"
 	"testing"
 
-	corestore "cosmossdk.io/core/store"
+	"github.com/davecgh/go-spew/spew"
+	"github.com/m1gwings/treedrawer/tree"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	corestore "cosmossdk.io/core/store"
+
 	dbm "github.com/cosmos/iavl/db"
 	iavlrand "github.com/cosmos/iavl/internal/rand"
+	ics23 "github.com/cosmos/ics23/go"
 )
 
 var (
@@ -25,6 +29,78 @@ var (
 	testFuzzIterations int
 	random             *iavlrand.Rand
 )
+
+func TestXXX(t *testing.T) {
+	mt := NewMutableTree(dbm.NewMemDB(), 0, false, NewNopLogger())
+	for _, v := range [][]byte{{1}, {2}, {4}, {5}, {7}} {
+		mt.Set(v, v)
+	}
+	v, i, err := mt.SaveVersion()
+	fmt.Printf("SAVE %X %d %v\n", v, i, err)
+	fmt.Println()
+	PrintTree(mt.ImmutableTree)
+	it := mt.ImmutableTree
+
+	var addTree func(*Node, *tree.Tree)
+	addTree = func(n *Node, x *tree.Tree) {
+		if n == nil {
+			return
+		}
+		x = x.AddChild(tree.NodeString(fmt.Sprintf("%X/%.3X", n.key, n.hash)))
+		if n.leftNodeKey != nil {
+			nn, err := n.getLeftNode(it)
+			if err != nil {
+				panic(err)
+			}
+			addTree(nn, x)
+		}
+		if n.rightNodeKey != nil {
+			nn, err := n.getRightNode(it)
+			if err != nil {
+				panic(err)
+			}
+			addTree(nn, x)
+		}
+	}
+	x := tree.NewTree(tree.NodeString("start"))
+	addTree(mt.root, x)
+	fmt.Println(x)
+
+	key := []byte{1, 0}
+	proof, err := mt.GetProof(key)
+	if err != nil {
+		panic(err)
+	}
+	/*
+		fmt.Println("LOOKING FOR", item, "VALUE", v)
+		for i, n := range proof.LeftPath {
+			fmt.Println("LEFTPATH", i, n.stringIndented(" "))
+		}
+		for i, in := range proof.InnerNodes {
+			for j, n := range in {
+				fmt.Println("INNER NODE", i, j, n.stringIndented(" "))
+			}
+		}
+		for i, n := range proof.Leaves {
+			fmt.Println("LEAVES", i, n.stringIndented(" "))
+		}
+		fmt.Println("LEFT MOST", proof.LeftPath.isLeftmost())
+		fmt.Println("RIGHT MOST", proof.LeftPath.isRightmost())
+		fmt.Println("VERIFY ROOT", proof.Verify(mt.root.hash))
+	*/
+	spew.Config.DisableMethods = true
+	spew.Dump(proof)
+	root := mt.root.hash
+
+	fmt.Println("VERIFY KEY", key)
+	fmt.Println("VERIFY ICS23", ics23.VerifyMembership(ics23.IavlSpec, root, proof, key, key))
+	fmt.Println("VERIFY ABS ICS23", ics23.VerifyNonMembership(ics23.IavlSpec, root, proof, key))
+
+	fmt.Println("VERIFY", proof.GetExist().Verify(ics23.IavlSpec, root, key, key))
+	if proof.GetNonexist() != nil {
+		fmt.Println("VERIFY ABS", proof.GetNonexist().Verify(ics23.IavlSpec, root, key))
+	}
+}
 
 func SetupTest() {
 	random = iavlrand.NewRand()
