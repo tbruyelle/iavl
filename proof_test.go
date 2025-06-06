@@ -29,7 +29,7 @@ func TestTreeGetProof(t *testing.T) {
 	require.NoError(err, "%+v", err)
 	require.True(res)
 
-	key = []byte{0x1}
+	key = []byte{0x11, 0}
 	proof, err = tree.GetNonMembershipProof(key)
 	require.NoError(err)
 	require.NotNil(proof)
