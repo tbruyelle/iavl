@@ -3,9 +3,12 @@ package iavl
 
 import (
 	"bytes"
+	"fmt"
 	"sort"
 	"testing"
 
+	"github.com/davecgh/go-spew/spew"
+	treed "github.com/m1gwings/treedrawer/tree"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -19,6 +22,34 @@ func TestTreeGetProof(t *testing.T) {
 		key := []byte{ikey}
 		tree.Set(key, []byte(iavlrand.RandStr(8)))
 	}
+	v, i, err := tree.SaveVersion()
+	fmt.Printf("SAVE %X %d %v\n", v, i, err)
+	fmt.Println()
+	var addTree func(*Node, *treed.Tree)
+	addTree = func(n *Node, x *treed.Tree) {
+		if n == nil {
+			return
+		}
+		x = x.AddChild(treed.NodeString(fmt.Sprintf("%X / %.3X", n.key, n.hash)))
+		// x = x.AddChild(treed.NodeString(fmt.Sprintf("%X", n.key)))
+		if n.leftNodeKey != nil {
+			nn, err := n.getLeftNode(tree.ImmutableTree)
+			if err != nil {
+				panic(err)
+			}
+			addTree(nn, x)
+		}
+		if n.rightNodeKey != nil {
+			nn, err := n.getRightNode(tree.ImmutableTree)
+			if err != nil {
+				panic(err)
+			}
+			addTree(nn, x)
+		}
+	}
+	x := treed.NewTree(treed.NodeString("start"))
+	addTree(tree.root, x)
+	fmt.Println(x)
 
 	key := []byte{0x32}
 	proof, err := tree.GetMembershipProof(key)
@@ -29,10 +60,13 @@ func TestTreeGetProof(t *testing.T) {
 	require.NoError(err, "%+v", err)
 	require.True(res)
 
-	key = []byte{0x11, 0}
+	key = []byte{0x33}
 	proof, err = tree.GetNonMembershipProof(key)
 	require.NoError(err)
 	require.NotNil(proof)
+	spew.Config.DisableMethods = true
+	spew.Dump(proof)
+	fmt.Printf("left=%X right=%X\n", proof.GetNonexist().Left.GetKey(), proof.GetNonexist().Right.GetKey())
 
 	res, err = tree.VerifyNonMembership(proof, key)
 	require.NoError(err, "%+v", err)
